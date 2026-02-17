@@ -1,12 +1,12 @@
 import datetime
 import json
+import re
 import sys
 import urllib
 import os
 import codecs
 from pathlib import Path
 
-import httpx
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -52,7 +52,14 @@ class Osintgram:
         if clear_cookies:
             self.clear_cache()
 
+    @staticmethod
+    def _validate_username(username):
+        if not username or not re.match(r'^[a-zA-Z0-9_.]{1,30}$', username):
+            pc.printout("Error: invalid username. Instagram usernames can only contain letters, numbers, periods, and underscores (max 30 chars).\n", pc.RED)
+            sys.exit(2)
+
     def setTarget(self, target):
+        self._validate_username(target)
         self.target = target
         user = self.get_user(target)
         self.target_id = user['id']
@@ -164,9 +171,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_addrs.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['address'] = addrs_list
@@ -189,47 +195,34 @@ class Osintgram:
         data = self.__get_feed__()
         counter = 0
 
-        try:
-            for item in data:
-                if "caption" in item:
-                    if item["caption"] is not None:
-                        text = item["caption"]["text"]
-                        captions.append(text)
-                        counter = counter + 1
-                        sys.stdout.write("\rFound %i" % counter)
-                        sys.stdout.flush()
-
-        except AttributeError:
-            pass
-
-        except KeyError:
-            pass
+        for item in data:
+            if "caption" in item and item["caption"] is not None:
+                text = item["caption"].get("text")
+                if text:
+                    captions.append(text)
+                    counter += 1
+                    sys.stdout.write("\rFound %i" % counter)
+                    sys.stdout.flush()
 
         json_data = {}
 
         if counter > 0:
             pc.printout("\nWoohoo! We found " + str(counter) + " captions\n", pc.GREEN)
 
-            file = None
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_captions.txt"
-                file = open(file_name, "w")
-
             for s in captions:
                 print(s + "\n")
 
-                if self.writeFile:
-                    file.write(s + "\n")
+            if self.writeFile:
+                file_name = self.output_dir + "/" + self.target + "_captions.txt"
+                with open(file_name, "w") as f:
+                    for s in captions:
+                        f.write(s + "\n")
 
             if self.jsonDump:
                 json_data['captions'] = captions
-                json_file_name = self.output_dir + "/" + self.target + "_followings.json"
+                json_file_name = self.output_dir + "/" + self.target + "_captions.json"
                 with open(json_file_name, 'w') as f:
                     json.dump(json_data, f)
-
-            if file is not None:
-                file.close()
 
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
@@ -253,9 +246,8 @@ class Osintgram:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_comments.txt"
-            file = open(file_name, "w")
-            file.write(str(comments_counter) + " comments in " + str(posts) + " posts\n")
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(f"{comments_counter} comments in {posts} posts\n")
 
         if self.jsonDump:
             json_data = {
@@ -301,7 +293,6 @@ class Osintgram:
             file_name = self.output_dir + "/" + self.target + "_comment_data.txt"
             with open(file_name, 'w') as f:
                 f.write(str(t))
-                f.close()
         
         if self.jsonDump:
             file_name_json = self.output_dir + "/" + self.target + "_comment_data.json"
@@ -365,9 +356,8 @@ class Osintgram:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_followers.txt"
-            file = open(file_name, "w")
-            file.write(str(t))
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(t))
 
         if self.jsonDump:
             json_data['followers'] = followers
@@ -430,9 +420,8 @@ class Osintgram:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_followings.txt"
-            file = open(file_name, "w")
-            file.write(str(t))
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(t))
 
         if self.jsonDump:
             json_data['followings'] = followings_list
@@ -480,24 +469,24 @@ class Osintgram:
 
             ssort = sorted(hashtag_counter.items(), key=lambda value: value[1], reverse=True)
 
-            file = None
             json_data = {}
             hashtags_list = []
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_hashtags.txt"
-                file = open(file_name, "w")
+            lines = []
 
             for k, v in ssort:
                 hashtag = str(k.decode('utf-8'))
-                print(str(v) + ". " + hashtag)
-                if self.writeFile:
-                    file.write(str(v) + ". " + hashtag + "\n")
+                lines.append(f"{v}. {hashtag}")
                 if self.jsonDump:
                     hashtags_list.append(hashtag)
 
-            if file is not None:
-                file.close()
+            for line in lines:
+                print(line)
+
+            if self.writeFile:
+                file_name = self.output_dir + "/" + self.target + "_hashtags.txt"
+                with open(file_name, "w") as f:
+                    for line in lines:
+                        f.write(line + "\n")
 
             if self.jsonDump:
                 json_data['hashtags'] = hashtags_list
@@ -608,9 +597,8 @@ class Osintgram:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_likes.txt"
-            file = open(file_name, "w")
-            file.write(str(like_counter) + result)
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(like_counter) + result)
 
         if self.jsonDump:
             json_data = {
@@ -631,7 +619,7 @@ class Osintgram:
         if self.check_private_profile():
             return
 
-        pc.printout("Searching for target captions...\n")
+        pc.printout("Searching for target media types...\n")
 
         counter = 0
         photo_counter = 0
@@ -656,9 +644,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_mediatype.txt"
-                file = open(file_name, "w")
-                file.write(str(photo_counter) + " photos and " + str(video_counter) + " video posted by target\n")
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(f"{photo_counter} photos and {video_counter} videos posted by target\n")
 
             pc.printout("\nWoohoo! We found " + str(photo_counter) + " photos and " + str(video_counter) +
                         " video posted by target\n", pc.GREEN)
@@ -721,9 +708,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_users_who_commented.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['users_who_commented'] = ssort
@@ -789,9 +775,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_users_who_tagged.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['users_who_tagged'] = ssort
@@ -805,15 +790,19 @@ class Osintgram:
         if self.check_private_profile():
             return
 
-        content = httpx.get("https://www.instagram.com/" + str(self.target) + "/?__a=1")
-        data = content.json()
+        pc.printout("Searching for target photo descriptions...\n")
 
-        dd = data['graphql']['user']['edge_owner_to_timeline_media']['edges']
+        data = self.__get_feed__()
+        descriptions = []
 
-        if len(dd) > 0:
-            pc.printout("\nWoohoo! We found " + str(len(dd)) + " descriptions\n", pc.GREEN)
+        for item in data:
+            if item.get('accessibility_caption'):
+                descriptions.append(item['accessibility_caption'])
+            elif item.get('caption') and item['caption'].get('text'):
+                descriptions.append(item['caption']['text'])
 
-            count = 1
+        if len(descriptions) > 0:
+            pc.printout(f"\nWoohoo! We found {len(descriptions)} descriptions\n", pc.GREEN)
 
             t = PrettyTable(['Photo', 'Description'])
             t.align["Photo"] = "l"
@@ -822,24 +811,15 @@ class Osintgram:
             json_data = {}
             descriptions_list = []
 
-            for i in dd:
-                node = i.get('node')
-                descr = node.get('accessibility_caption')
+            for count, descr in enumerate(descriptions, 1):
                 t.add_row([str(count), descr])
-
                 if self.jsonDump:
-                    description = {
-                        'description': descr
-                    }
-                    descriptions_list.append(description)
-
-                count += 1
+                    descriptions_list.append({'description': descr})
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_photodes.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['descriptions'] = descriptions_list
@@ -885,36 +865,28 @@ class Osintgram:
             data.extend(results.get('items', []))
             next_max_id = results.get('next_max_id')
 
-        try:
-            for item in data:
-                if counter == limit:
-                    break
-                if "image_versions2" in item:
-                    counter = counter + 1
-                    url = item["image_versions2"]["candidates"][0]["url"]
-                    photo_id = item["id"]
+        for item in data:
+            if counter == limit:
+                break
+            if "image_versions2" in item:
+                counter += 1
+                url = item["image_versions2"]["candidates"][0]["url"]
+                photo_id = item["id"]
+                end = self.output_dir + "/" + self.target + "_" + photo_id + ".jpg"
+                urllib.request.urlretrieve(url, end)
+                sys.stdout.write("\rDownloaded %i" % counter)
+                sys.stdout.flush()
+            elif "carousel_media" in item:
+                for i in item["carousel_media"]:
+                    if counter == limit:
+                        break
+                    counter += 1
+                    url = i["image_versions2"]["candidates"][0]["url"]
+                    photo_id = i["id"]
                     end = self.output_dir + "/" + self.target + "_" + photo_id + ".jpg"
                     urllib.request.urlretrieve(url, end)
                     sys.stdout.write("\rDownloaded %i" % counter)
                     sys.stdout.flush()
-                else:
-                    carousel = item["carousel_media"]
-                    for i in carousel:
-                        if counter == limit:
-                            break
-                        counter = counter + 1
-                        url = i["image_versions2"]["candidates"][0]["url"]
-                        photo_id = i["id"]
-                        end = self.output_dir + "/" + self.target + "_" + photo_id + ".jpg"
-                        urllib.request.urlretrieve(url, end)
-                        sys.stdout.write("\rDownloaded %i" % counter)
-                        sys.stdout.flush()
-
-        except AttributeError:
-            pass
-
-        except KeyError:
-            pass
 
         sys.stdout.write(" photos")
         sys.stdout.flush()
@@ -1038,9 +1010,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_tagged.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['tagged'] = tagged_list
@@ -1057,9 +1028,8 @@ class Osintgram:
             content = self.api.username_info(username)
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_user_id.txt"
-                file = open(file_name, "w")
-                file.write(str(content['user']['pk']))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(content['user']['pk']))
 
             user = dict()
             user['id'] = content['user']['pk']
@@ -1221,25 +1191,20 @@ class Osintgram:
             pc.printout("Do you want to get all emails? y/n: ", pc.YELLOW)
             value = input()
             
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
+            if value.lower() in ("y", "yes"):
                 value = len(followers)
-            elif value == str(""):
+            elif value == "":
                 print("\n")
                 return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many emails do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
+            elif value.lower() in ("n", "no"):
+                try:
+                    pc.printout("How many emails do you want to get? ", pc.YELLOW)
+                    value = int(input()) - 1
+                except ValueError:
+                    pc.printout("Error! Please enter a valid integer!\n", pc.RED)
+                    return
             else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
+                pc.printout("Error! Please enter y/n\n", pc.RED)
                 return
 
             for follow in followers:
@@ -1250,7 +1215,7 @@ class Osintgram:
                         break
                     results.append(follow)
 
-        except ClientThrottledError  as e:
+        except ClientThrottledError as e:
             pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
             pc.printout("\n")
 
@@ -1269,9 +1234,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_fwersemail.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['followers_email'] = results
@@ -1323,26 +1287,21 @@ class Osintgram:
             
             pc.printout("Do you want to get all emails? y/n: ", pc.YELLOW)
             value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
+
+            if value.lower() in ("y", "yes"):
                 value = len(followings)
-            elif value == str(""):
+            elif value == "":
                 print("\n")
                 return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many emails do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
+            elif value.lower() in ("n", "no"):
+                try:
+                    pc.printout("How many emails do you want to get? ", pc.YELLOW)
+                    value = int(input()) - 1
+                except ValueError:
+                    pc.printout("Error! Please enter a valid integer!\n", pc.RED)
+                    return
             else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
+                pc.printout("Error! Please enter y/n\n", pc.RED)
                 return
 
             for follow in followings:
@@ -1354,7 +1313,7 @@ class Osintgram:
                     if len(results) > value:
                         break
                     results.append(follow)
-        
+
         except ClientThrottledError as e:
             pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
             pc.printout("\n")
@@ -1375,9 +1334,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_fwingsemail.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['followings_email'] = results
@@ -1429,26 +1387,21 @@ class Osintgram:
         
             pc.printout("Do you want to get all phone numbers? y/n: ", pc.YELLOW)
             value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
+
+            if value.lower() in ("y", "yes"):
                 value = len(followings)
-            elif value == str(""):
+            elif value == "":
                 print("\n")
                 return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many phone numbers do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
+            elif value.lower() in ("n", "no"):
+                try:
+                    pc.printout("How many phone numbers do you want to get? ", pc.YELLOW)
+                    value = int(input()) - 1
+                except ValueError:
+                    pc.printout("Error! Please enter a valid integer!\n", pc.RED)
+                    return
             else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
+                pc.printout("Error! Please enter y/n\n", pc.RED)
                 return
 
             for follow in followings:
@@ -1464,7 +1417,7 @@ class Osintgram:
         except ClientThrottledError as e:
             pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
             pc.printout("\n")
-        
+
         print("\n")
 
         if len(results) > 0:
@@ -1472,7 +1425,7 @@ class Osintgram:
             t.align["ID"] = "l"
             t.align["Username"] = "l"
             t.align["Full Name"] = "l"
-            t.align["Phone number"] = "l"
+            t.align["Phone"] = "l"
 
             json_data = {}
 
@@ -1481,9 +1434,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_fwingsnumber.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['followings_phone_numbers'] = results
@@ -1502,12 +1454,10 @@ class Osintgram:
         followings = []
 
         try:
-
             pc.printout("Searching for phone numbers of users followers... this can take a few minutes\n")
 
-
             rank_token = AppClient.generate_uuid()
-            data = self.api.user_following(str(self.target_id), rank_token=rank_token)
+            data = self.api.user_followers(str(self.target_id), rank_token=rank_token)
 
             for user in data.get('users', []):
                 u = {
@@ -1518,9 +1468,9 @@ class Osintgram:
                 followings.append(u)
 
             next_max_id = data.get('next_max_id')
-            
+
             while next_max_id:
-                results = self.api.user_following(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
+                results = self.api.user_followers(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
 
                 for user in results.get('users', []):
                     u = {
@@ -1531,31 +1481,26 @@ class Osintgram:
                     followings.append(u)
 
                 next_max_id = results.get('next_max_id')
-        
+
             results = []
-            
+
             pc.printout("Do you want to get all phone numbers? y/n: ", pc.YELLOW)
             value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
+
+            if value.lower() in ("y", "yes"):
                 value = len(followings)
-            elif value == str(""):
+            elif value == "":
                 print("\n")
                 return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many phone numbers do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
+            elif value.lower() in ("n", "no"):
+                try:
+                    pc.printout("How many phone numbers do you want to get? ", pc.YELLOW)
+                    value = int(input()) - 1
+                except ValueError:
+                    pc.printout("Error! Please enter a valid integer!\n", pc.RED)
+                    return
             else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
+                pc.printout("Error! Please enter y/n\n", pc.RED)
                 return
 
             for follow in followings:
@@ -1579,7 +1524,7 @@ class Osintgram:
             t.align["ID"] = "l"
             t.align["Username"] = "l"
             t.align["Full Name"] = "l"
-            t.align["Phone number"] = "l"
+            t.align["Phone"] = "l"
 
             json_data = {}
 
@@ -1588,13 +1533,12 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_fwersnumber.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
-                json_data['followings_phone_numbers'] = results
-                json_file_name = self.output_dir + "/" + self.target + "_fwerssnumber.json"
+                json_data['followers_phone_numbers'] = results
+                json_file_name = self.output_dir + "/" + self.target + "_fwersnumber.json"
                 with open(json_file_name, 'w') as f:
                     json.dump(json_data, f)
 
@@ -1614,21 +1558,19 @@ class Osintgram:
         for post in data:
             comments = self.__get_comments__(post['id'])
             for comment in comments:
-                print(comment['text'])
-                
-                # if not any(u['id'] == comment['user']['pk'] for u in users):
-                #     user = {
-                #         'id': comment['user']['pk'],
-                #         'username': comment['user']['username'],
-                #         'full_name': comment['user']['full_name'],
-                #         'counter': 1
-                #     }
-                #     users.append(user)
-                # else:
-                #     for user in users:
-                #         if user['id'] == comment['user']['pk']:
-                #             user['counter'] += 1
-                #             break
+                if not any(u['id'] == comment['user']['pk'] for u in users):
+                    user = {
+                        'id': comment['user']['pk'],
+                        'username': comment['user']['username'],
+                        'full_name': comment['user']['full_name'],
+                        'counter': 1
+                    }
+                    users.append(user)
+                else:
+                    for user in users:
+                        if user['id'] == comment['user']['pk']:
+                            user['counter'] += 1
+                            break
 
         if len(users) > 0:
             ssort = sorted(users, key=lambda value: value['counter'], reverse=True)
@@ -1650,9 +1592,8 @@ class Osintgram:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_users_who_commented.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data['users_who_commented'] = ssort
@@ -1664,10 +1605,8 @@ class Osintgram:
 
     def clear_cache(self):
         try:
-            f = open("config/settings.json",'w')
-            f.write("{}")
-            pc.printout("Cache Cleared.\n",pc.GREEN)
+            with open("config/settings.json", 'w') as f:
+                f.write("{}")
+            pc.printout("Cache Cleared.\n", pc.GREEN)
         except FileNotFoundError:
-            pc.printout("Settings.json don't exist.\n",pc.RED)
-        finally:
-            f.close()
+            pc.printout("Settings.json doesn't exist.\n", pc.RED)

@@ -13,7 +13,7 @@ is_windows = False
 
 try:
     import gnureadline  
-except: 
+except ImportError:
     is_windows = True
     import pyreadline
 
