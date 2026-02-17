@@ -277,16 +277,16 @@ class Osintgram:
 
         for post in data:
             post_id = post.get('id')
-            comments = self.api.media_n_comments(post_id)
+            comments = self.__get_comments__(post_id)
             for comment in comments:
-                t.add_row([post_id, comment.get('user_id'), comment.get('user').get('username'), comment.get('text')])
-                comment = {
-                        "post_id": post_id,
-                        "user_id":comment.get('user_id'), 
-                        "username": comment.get('user').get('username'),
-                        "comment": comment.get('text')
-                    }
-                _comments.append(comment)
+                comment_data = {
+                    "post_id": post_id,
+                    "user_id": comment.get('user_id'),
+                    "username": comment.get('user', {}).get('username'),
+                    "comment": comment.get('text')
+                }
+                t.add_row([post_id, comment_data['user_id'], comment_data['username'], comment_data['comment']])
+                _comments.append(comment_data)
         
         print(t)
         if self.writeFile:
@@ -1451,10 +1451,10 @@ class Osintgram:
         if self.check_private_profile():
             return
 
-        followings = []
+        followers = []
 
         try:
-            pc.printout("Searching for phone numbers of users followers... this can take a few minutes\n")
+            pc.printout("Searching for phone numbers of target followers... this can take a few minutes\n")
 
             rank_token = AppClient.generate_uuid()
             data = self.api.user_followers(str(self.target_id), rank_token=rank_token)
@@ -1465,7 +1465,7 @@ class Osintgram:
                     'username': user['username'],
                     'full_name': user['full_name']
                 }
-                followings.append(u)
+                followers.append(u)
 
             next_max_id = data.get('next_max_id')
 
@@ -1478,7 +1478,7 @@ class Osintgram:
                         'username': user['username'],
                         'full_name': user['full_name']
                     }
-                    followings.append(u)
+                    followers.append(u)
 
                 next_max_id = results.get('next_max_id')
 
@@ -1488,7 +1488,7 @@ class Osintgram:
             value = input()
 
             if value.lower() in ("y", "yes"):
-                value = len(followings)
+                value = len(followers)
             elif value == "":
                 print("\n")
                 return
@@ -1503,7 +1503,7 @@ class Osintgram:
                 pc.printout("Error! Please enter y/n\n", pc.RED)
                 return
 
-            for follow in followings:
+            for follow in followers:
                 sys.stdout.write("\rCatched %i followers phone numbers" % len(results))
                 sys.stdout.flush()
                 user = self.api.user_info(str(follow['id']))
