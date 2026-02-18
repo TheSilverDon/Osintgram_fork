@@ -1,8 +1,8 @@
 import datetime
 import json
+import re
 import sys
 import urllib
-import codecs
 from pathlib import Path
 
 import ssl
@@ -44,7 +44,14 @@ class HikerCLI:
         self.writeFile = is_file
         self.jsonDump = is_json
 
+    @staticmethod
+    def _validate_username(username):
+        if not username or not re.match(r'^[a-zA-Z0-9_.]{1,30}$', username):
+            pc.printout("Error: invalid username. Instagram usernames can only contain letters, numbers, periods, and underscores (max 30 chars).\n", pc.RED)
+            sys.exit(2)
+
     def setTarget(self, target):
+        self._validate_username(target)
         self.target = target
         self.user = self.get_user(target)
         self.target_id = self.user["pk"]
@@ -155,9 +162,8 @@ class HikerCLI:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_addrs.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data["address"] = addrs_list
@@ -180,49 +186,36 @@ class HikerCLI:
         data = self.__get_feed__()
         counter = 0
 
-        try:
-            for item in data:
-                if "caption" in item:
-                    if item["caption"] is not None:
-                        text = item["caption"]["text"]
-                        captions.append(text)
-                        counter = counter + 1
-                        sys.stdout.write("\rFound %i" % counter)
-                        sys.stdout.flush()
-
-        except AttributeError:
-            pass
-
-        except KeyError:
-            pass
+        for item in data:
+            if "caption" in item and item["caption"] is not None:
+                text = item["caption"].get("text")
+                if text:
+                    captions.append(text)
+                    counter += 1
+                    sys.stdout.write("\rFound %i" % counter)
+                    sys.stdout.flush()
 
         json_data = {}
 
         if counter > 0:
             pc.printout("\nWoohoo! We found " + str(counter) + " captions\n", pc.GREEN)
 
-            file = None
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_captions.txt"
-                file = open(file_name, "w")
-
             for s in captions:
                 print(s + "\n")
 
-                if self.writeFile:
-                    file.write(s + "\n")
+            if self.writeFile:
+                file_name = self.output_dir + "/" + self.target + "_captions.txt"
+                with open(file_name, "w") as f:
+                    for s in captions:
+                        f.write(s + "\n")
 
             if self.jsonDump:
                 json_data["captions"] = captions
                 json_file_name = (
-                    self.output_dir + "/" + self.target + "_followings.json"
+                    self.output_dir + "/" + self.target + "_captions.json"
                 )
                 with open(json_file_name, "w") as f:
                     json.dump(json_data, f)
-
-            if file is not None:
-                file.close()
 
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
@@ -247,11 +240,8 @@ class HikerCLI:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_comments.txt"
-            file = open(file_name, "w")
-            file.write(
-                str(comments_counter) + " comments in " + str(posts) + " posts\n"
-            )
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(f"{comments_counter} comments in {posts} posts\n")
 
         if self.jsonDump:
             json_data = {"comment_counter": comments_counter, "posts": posts}
@@ -301,7 +291,6 @@ class HikerCLI:
             file_name = self.output_dir + "/" + self.target + "_comment_data.txt"
             with open(file_name, "w") as f:
                 f.write(str(t))
-                f.close()
 
         if self.jsonDump:
             file_name_json = self.output_dir + "/" + self.target + "_comment_data.json"
@@ -350,9 +339,8 @@ class HikerCLI:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_followers.txt"
-            file = open(file_name, "w")
-            file.write(str(t))
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(t))
 
         if self.jsonDump:
             json_data = {"followers": items}
@@ -402,9 +390,8 @@ class HikerCLI:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_followings.txt"
-            file = open(file_name, "w")
-            file.write(str(t))
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(t))
 
         if self.jsonDump:
             json_data = {"followings": items}
@@ -443,24 +430,24 @@ class HikerCLI:
                 hashtag_counter.items(), key=lambda value: value[1], reverse=True
             )
 
-            file = None
             hashtags_list = []
+            lines = []
 
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_hashtags.txt"
-                file = open(file_name, "w")
-
-            print()
             for hashtag, v in ssort:
                 line = f"{v}. {hashtag}"
-                print(line)
-                if self.writeFile:
-                    file.write(f"{line}\n")
+                lines.append(line)
                 if self.jsonDump:
                     hashtags_list.append(hashtag)
 
-            if file is not None:
-                file.close()
+            print()
+            for line in lines:
+                print(line)
+
+            if self.writeFile:
+                file_name = self.output_dir + "/" + self.target + "_hashtags.txt"
+                with open(file_name, "w") as f:
+                    for line in lines:
+                        f.write(f"{line}\n")
 
             if self.jsonDump:
                 json_data = {"hashtags": hashtags_list}
@@ -562,9 +549,8 @@ class HikerCLI:
 
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_likes.txt"
-            file = open(file_name, "w")
-            file.write(str(like_counter) + result)
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(like_counter) + result)
 
         if self.jsonDump:
             json_data = {
@@ -585,7 +571,7 @@ class HikerCLI:
         if self.check_private_profile():
             return
 
-        pc.printout("Searching for target captions...\n")
+        pc.printout("Searching for target media types...\n")
 
         counter = 0
         photo_counter = 0
@@ -596,10 +582,10 @@ class HikerCLI:
         for post in data:
             if "media_type" in post:
                 if post["media_type"] == 1:
-                    photo_counter = photo_counter + 1
+                    photo_counter += 1
                 elif post["media_type"] == 2:
-                    video_counter = video_counter + 1
-                counter = counter + 1
+                    video_counter += 1
+                counter += 1
                 sys.stdout.write("\rChecked %i" % counter)
                 sys.stdout.flush()
 
@@ -610,14 +596,8 @@ class HikerCLI:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_mediatype.txt"
-                file = open(file_name, "w")
-                file.write(
-                    str(photo_counter)
-                    + " photos and "
-                    + str(video_counter)
-                    + " video posted by target\n"
-                )
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(f"{photo_counter} photos and {video_counter} videos posted by target\n")
 
             pc.printout(
                 "\nWoohoo! We found "
@@ -685,9 +665,8 @@ class HikerCLI:
                 file_name = (
                     self.output_dir + "/" + self.target + "_users_who_commented.txt"
                 )
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data["users_who_commented"] = ssort
@@ -750,9 +729,8 @@ class HikerCLI:
                 file_name = (
                     self.output_dir + "/" + self.target + "_users_who_tagged.txt"
                 )
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data = {"users_who_tagged": ssort}
@@ -921,9 +899,8 @@ class HikerCLI:
 
             if self.writeFile:
                 file_name = self.output_dir + "/" + self.target + "_tagged.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data["tagged"] = tagged_list
@@ -952,9 +929,8 @@ class HikerCLI:
         user = data["user"]
         if self.writeFile:
             file_name = self.output_dir + "/" + self.target + "_user_id.txt"
-            file = open(file_name, "w")
-            file.write(str(user["pk"]))
-            file.close()
+            with open(file_name, "w") as f:
+                f.write(str(user["pk"]))
         return user
 
     def set_write_file(self, flag):
@@ -980,19 +956,6 @@ class HikerCLI:
             pc.printout("\n")
 
         self.jsonDump = flag
-
-    def to_json(self, python_object):
-        if isinstance(python_object, bytes):
-            return {
-                "__class__": "bytes",
-                "__value__": codecs.encode(python_object, "base64").decode(),
-            }
-        raise TypeError(repr(python_object) + " is not JSON serializable")
-
-    def from_json(self, json_object):
-        if "__class__" in json_object and json_object["__class__"] == "bytes":
-            return codecs.decode(json_object["__value__"].encode(), "base64")
-        return json_object
 
     def check_private_profile(self):
         if self.is_private:
@@ -1070,10 +1033,9 @@ class HikerCLI:
                 )
 
             if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + f"_{file_name}.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                out_file = self.output_dir + "/" + self.target + f"_{file_name}.txt"
+                with open(out_file, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data = {json_key: results}
@@ -1147,21 +1109,19 @@ class HikerCLI:
         for post in data:
             comments = self.__get_comments__(post["id"])
             for comment in comments:
-                print(comment["text"])
-
-                # if not any(u['id'] == comment['user']['pk'] for u in users):
-                #     user = {
-                #         'id': comment['user']['pk'],
-                #         'username': comment['user']['username'],
-                #         'full_name': comment['user']['full_name'],
-                #         'counter': 1
-                #     }
-                #     users.append(user)
-                # else:
-                #     for user in users:
-                #         if user['id'] == comment['user']['pk']:
-                #             user['counter'] += 1
-                #             break
+                if not any(u["id"] == comment["user"]["pk"] for u in users):
+                    user = {
+                        "id": comment["user"]["pk"],
+                        "username": comment["user"]["username"],
+                        "full_name": comment["user"]["full_name"],
+                        "counter": 1,
+                    }
+                    users.append(user)
+                else:
+                    for user in users:
+                        if user["id"] == comment["user"]["pk"]:
+                            user["counter"] += 1
+                            break
 
         if len(users) > 0:
             ssort = sorted(users, key=lambda value: value["counter"], reverse=True)
@@ -1182,9 +1142,8 @@ class HikerCLI:
                 file_name = (
                     self.output_dir + "/" + self.target + "_users_who_commented.txt"
                 )
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
+                with open(file_name, "w") as f:
+                    f.write(str(t))
 
             if self.jsonDump:
                 json_data = {"users_who_commented": ssort}
